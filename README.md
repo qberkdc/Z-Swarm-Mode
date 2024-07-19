@@ -1,6 +1,6 @@
-<div align="right">
-  <img heigth="30px" width="auto" src="">
-</div>
+<img src="https://raw.githubusercontent.com/qberkdc/zombie_swarm/public/logos/logo.jpg">
+
+----
 
 * **`[#]`** **Mod Authors**
 * **`[#]`** **`(  Modder  )`** Multi_Midgets
@@ -12,6 +12,6 @@
 * **`[#]`** **Download**
 * **`[#]`** [Releases](https://github.com/qberkdc/zombie_swarm/releases)
 
-<div align="center">
-  <img heigth="50px" width="auto" src="">
-</div>
+----
+
+<img src="https://raw.githubusercontent.com/qberkdc/zombie_swarm/public/logos/banner.jpg">
