@@ -1,5 +1,5 @@
 <div align="center">
-    <img eight="300px" width="300px" src="https://raw.githubusercontent.com/qberkdc/zombie_swarm/public/logos/logo.jpg">
+    <img eight="300px" width="auto" src="https://raw.githubusercontent.com/qberkdc/zombie_swarm/public/logos/zombie_swarm.png">
 </div>
 
 <div align="center">
