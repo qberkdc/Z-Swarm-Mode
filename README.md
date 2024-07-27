@@ -1,4 +1,6 @@
-<img src="https://raw.githubusercontent.com/qberkdc/zombie_swarm/public/logos/logo.jpg">
+<div align="center">
+    <img eight="300px" width="300px" src="https://raw.githubusercontent.com/qberkdc/zombie_swarm/public/logos/logo.jpg">
+</div>
 
 <div align="center">
     <img src="https://img.shields.io/github/downloads/qberkdc/zombie_swarm/total?style=plastic" />
