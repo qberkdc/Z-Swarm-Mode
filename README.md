@@ -22,6 +22,11 @@
 * **`[#]`** **Download**
 * **`[#]`** [Releases](https://github.com/qberkdc/zombie_swarm/releases)
 
+<div align="center">
+    <a href="https://youtu.be/SnIuTU4RQaE">
+    <img src="https://raw.githubusercontent.com/qberkdc/zombie_swarm/public/logos/youtube.jpg">
+</div>
+
 ----
 
 <img src="https://raw.githubusercontent.com/qberkdc/zombie_swarm/public/logos/banner.jpg">
