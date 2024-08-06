@@ -39,37 +39,14 @@ public message_money(msg_id, msg_dest, msg_entity) {
 	return PLUGIN_HANDLED;
 }
 
-public hide_money(id) {
-	id -= 6333;
-	
-	if(!is_user_alive(id)) {
-		return;
-	}
-	
-	// Hide money
-	message_begin(MSG_ONE, get_user_msgid("HideWeapon"), _, id)
-	write_byte((1<<5)) // what to hide bitsum
-	message_end()
-	
-	// Hide the HL crosshair that's drawn
-	message_begin(MSG_ONE, get_user_msgid("Crosshair"), _, id)
-	write_byte(0) // toggle
-	message_end()
-}
-
-
 public pl_damage(victim, inflictor, attacker, Float:damage, damagebits) {
 	if(!attacker || !victim || attacker == victim) {
 		return;
 	}
 	
 	if(zs_get_user_zombie(victim) && !zs_get_user_zombie(attacker)) {
-		cdata_money[attacker] += (floatround(damage) / 4);
+		cdata_money[attacker] += (floatround(damage) / 6);
 	}
-}
-
-public client_putinserver(id) { 
-	set_task(0.4, "hide_money", id + 6333, _, _, "b");
 }
 
 public client_connect(id) {

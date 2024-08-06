@@ -10,7 +10,7 @@ public plugin_init() {
 	itemid = zs_register_item("HE Grenade", 200);
 }
 
-public zs_item_selected(id, item) {
+public zs_item_select(id, item) {
 	if(itemid == item) {
 		new hg = cs_get_user_bpammo(id, CSW_HEGRENADE);
 		if(hg >= 3) {

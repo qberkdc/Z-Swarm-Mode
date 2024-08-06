@@ -2,7 +2,7 @@
 #include <cstrike>
 #include <fakemeta>
 
-#define STEP_DELAY 0.310
+#define STEP_DELAY 0.38
  
 new Float:g_fNextStep[33];
 
@@ -19,9 +19,11 @@ new const cpack_hurt[][] = {
 }
 */
 
+/*
 new const cpack_died[][] = {
     "zswarm/pl_die1.wav"
 }
+*/
 
 public plugin_init() {
     register_plugin("[ZS] Human Sounds", "v2.53.6", "--chcode");
@@ -40,23 +42,33 @@ public plugin_precache() {
 	}
 	*/
     
+    /*
 	for(new i = 0; i < sizeof(cpack_died); i++) {
 		precache_sound(cpack_died[i]);
 	}
+	*/
 }
 
 public fwd_PlayerPreThink(id) {
 	if(!is_user_alive(id))
 		return FMRES_IGNORED;
+	
+	if(ntv_zs_get_user_zombie(id))
+		return PLUGIN_HANDLED;
  
 	set_pev(id, pev_flTimeStepSound, 999);
 	
 	new speed = floatround(fm_get_ent_speed(id));
 	new flags = pev(id, pev_flags);
+	new Float: setdelay = STEP_DELAY;
+	
+	if(speed > 134) {
+		setdelay = STEP_DELAY * (float(200) / float(speed));
+	}
 	
 	if(g_fNextStep[id] < get_gametime() && !ntv_zs_get_user_zombie(id) && flags & FL_ONGROUND && speed > 134) {
 		emit_sound(id, CHAN_AUTO, cpack_walk[random(sizeof(cpack_walk))], VOL_NORM, ATTN_STATIC, 0, PITCH_NORM);
-		g_fNextStep[id] = get_gametime() + STEP_DELAY;
+		g_fNextStep[id] = get_gametime() + setdelay;
 	}
 	
 	return FMRES_IGNORED;
@@ -90,10 +102,12 @@ public Forward_EmitSound(id, channel, const sound[], Float:volume, Float:attn, f
 		}
 		*/
         
+        /*
 		if(containi(data, "die") != -1 || containi(data, "death") != -1) {
 			emit_sound(id, CHAN_AUTO, cpack_died[random(sizeof(cpack_died))], volume, attn, flag, pitch);
 			return FMRES_SUPERCEDE;
 		}
+		*/
     }
     
     return FMRES_IGNORED;

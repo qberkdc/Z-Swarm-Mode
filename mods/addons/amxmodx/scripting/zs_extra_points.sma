@@ -12,7 +12,7 @@ public plugin_init() {
 	itemid = zs_register_item(NAME, COST);
 }
 
-public zs_item_selected(id, item) {
+public zs_item_select(id, item) {
 	if(itemid == item) {
 		zs_rpg_set_points(id, zs_rpg_get_points(id) + 1);
 	}

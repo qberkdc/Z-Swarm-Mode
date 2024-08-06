@@ -10,6 +10,29 @@
 #include <screen>
 #include <roundev>
 
+stock set_user_freeze(id) { 
+	set_pev( id , pev_flags , pev( id , pev_flags ) | FL_FROZEN );
+}
+
+stock set_user_unfreeze(id) {
+	set_pev( id , pev_flags , pev( id , pev_flags ) & ~FL_FROZEN );
+}
+
+new const g_StartMessages[][] = {
+    "^^3[ZS] ^^7For extra item menu, press ^"buy^" button.",
+    "^^3[ZS] ^^7For zombie swarm menu, press ^"team^" button."
+}
+
+new const g_Ambient_Sound[][] = {
+	"zswarm/ambience_1.wav"
+}
+
+new const Float: g_Ambient_Delay[] = {
+	55.42
+}
+
+new g_Ambient_Data;
+
 #define SURVIVOR_PUNCHANGLE 30.0
 #define SURVIVOR_BACKSPEED 1.0
 
@@ -34,6 +57,8 @@ enum _: {
 
 #define Ham_Player_ResetMaxSpeed Ham_Item_PreFrame
 #define write_coord_f(%1) engfunc(EngFunc_WriteCoord,%1)
+
+forward zs_human_respawn(id);
 
 new const m_iId                   = 43;
 new const m_flNextPrimaryAttack   = 46;
@@ -149,6 +174,8 @@ new rounds;
 new boss_rounds;
 new g_RoundStatus;
 new g_ZombieModelIndex[33];
+new g_HumanModelIndex[33];
+new g_UserArmorType[33];
 
 new bool: g_ShowMenu[33];
 new bool: g_ShowMenuFirstTime[33];
@@ -261,6 +288,20 @@ new const g_sound_female_die[][] =
 	"zswarm/light_death1.wav"
 };
 
+new const g_sound_human_female_pain[][] =
+{
+	"zswarm/female_pain_1.wav",
+	"zswarm/female_pain_2.wav",
+	"zswarm/female_pain_3.wav"
+};
+
+new const g_sound_human_female_die[][] =
+{
+	"zswarm/female_die_1.wav",
+	"zswarm/female_die_2.wav",
+	"zswarm/female_die_3.wav"
+};
+
 new const g_sound_boss_pain[][] =
 {
 	"zswarm/cso_boss_hurt1.wav",
@@ -273,26 +314,42 @@ new const g_sound_boss_die[][] =
 	"zswarm/cso_boss_death2.wav"
 };
 
-new const g_SoundBuild[][] =
-{
-	"buttons/spark1.wav",
-	"buttons/spark2.wav",
-	"buttons/spark3.wav",
-	"buttons/spark4.wav",
-	"buttons/spark5.wav",
-	"buttons/spark6.wav"
-
+new const g_sound_heal[][] = {
+	"zswarm/cso_heal.wav",
+	"zswarm/cso_heal_female.wav"
 };
 
-new const g_SoundComplete[][] = 
-{
-	"buttons/button1.wav",
-	"buttons/button3.wav",
-	"buttons/button4.wav",
-	"buttons/button5.wav",
-	"buttons/button6.wav",
-	"buttons/button9.wav"
+new const g_sound_male_radio[][] = {
+	"zswarm/male_radio1.wav",
+	"zswarm/male_radio2.wav",
+	"zswarm/male_radio3.wav",
+	"zswarm/male_radio4.wav"
 };
+
+new const g_sound_female_radio[][] = {
+	"zswarm/female_radio1.wav",
+	"zswarm/female_radio2.wav",
+	"zswarm/female_radio3.wav",
+	"zswarm/female_radio4.wav",
+	"zswarm/female_radio5.wav"
+};
+
+new const g_sound_male_died_radio[][] = {
+	"zswarm/male_died_radio1.wav",
+	"zswarm/male_died_radio2.wav",
+	"zswarm/male_died_radio3.wav"
+};
+
+new const g_sound_female_died_radio[][] = {
+	"zswarm/female_died_radio1.wav",
+	"zswarm/female_died_radio2.wav",
+	"zswarm/female_died_radio3.wav"
+};
+
+new const g_sound_break[] = "zswarm/armor_break.wav";
+
+new healspr;
+new const healsprite[] = "sprites/healsprite/healing.spr";
 
 new Float:g_flDisplayDamage[33];
 
@@ -304,6 +361,8 @@ new g_CurrentModel[33][32];
 
 new Float: g_LastLeap[33];
 new Float: g_LastFthrow[33];
+
+new Attack[33];
 
 new bool: g_bDeadNvg[2][33];
 new g_bCustomNvg[33];
@@ -327,23 +386,25 @@ new const g_RandomModel[][] =
 	"gign"
 };
 
-new const g_ZombiePlayerModels[][] = {
-	"cso_zombie",
-	"cso_light"
+new g_ZombiePlayerModels[256][256];
+new g_ZombieClaws[256][256];
+new g_ZombieModelGender[256];
+new g_ZombieCount;
+
+new g_HumanPlayerModels[256][256];
+new g_HumanModelGender[256];
+new g_HumanCount;
+
+new g_BossIndex[33];
+
+new const g_BossPlayerModels[][] = {
+	"cso_boss"
 };
 
-new const g_ZombieClaws[][] = { 
-	"models/zswarm/v_zombie_knife.mdl",
-	"models/zswarm/v_light_knife.mdl"
+new const g_BossClaws[][] = {
+	"models/zswarm/v_boss_knife.mdl"
 };
 
-new const g_ZombieModelGender[] = {
-	MALE,
-	FEMALE
-};
-
-new const g_BossPlayerModels[] = "cso_boss";
-new const g_BossClaws[] = "models/zswarm/v_boss_knife.mdl";
 new const g_ZombieFleshThrow[] = "models/hgibs.mdl";	//11 Submodels
 
 new g_MaxPlayers;
@@ -353,9 +414,7 @@ new bool: g_bFreezeTime;
 new g_bFFire;
 
 new g_ForwardSpawn;
-
 new g_bIsAlive[33], g_bIsBot[33];
-
 new g_MsgID_Health, g_MsgID_ScreenFade, g_MsgID_SetFov, g_MsgID_NVGToggle;
 
 new cvar_Swith, cvar_Health, cvar_Armour, cvar_Gravity, cvar_Footsteps, cvar_Speed,
@@ -369,6 +428,114 @@ cvar_GunMenu, cvar_Weapons, cvar_Equip;
 #define VERSION "3.1"
 #define AUTHOR "--chcode & MMidget"
 
+public plugin_reprecache() {
+	new sz_Model[256];
+
+	for(new i = 0 ; i < g_ZombieCount ; i++)
+	{
+		format(sz_Model, charsmax(sz_Model), "models/player/%s/%s.mdl", g_ZombiePlayerModels[i], g_ZombiePlayerModels[i]);
+		engfunc(EngFunc_PrecacheModel, sz_Model);
+	}
+	
+	for(new i = 0; i < g_ZombieCount; i++) {
+		format(sz_Model, charsmax(sz_Model), "models/%s", g_ZombieClaws[i]);
+		engfunc(EngFunc_PrecacheModel, sz_Model);
+	}
+	
+	for(new i = 0; i < g_HumanCount; i++) {
+		format(sz_Model, charsmax(sz_Model), "models/player/%s/%s.mdl", g_HumanPlayerModels[i], g_HumanPlayerModels[i]);
+		engfunc(EngFunc_PrecacheModel, sz_Model);
+	}
+	
+	for(new i = 0; i < sizeof(g_BossPlayerModels); i++) {
+		format(sz_Model, charsmax(sz_Model), "models/player/%s/%s.mdl", g_BossPlayerModels[i], g_BossPlayerModels[i]);
+		engfunc(EngFunc_PrecacheModel, sz_Model);
+	}
+	
+	for(new i = 0; i < sizeof(g_BossClaws); i++) {
+		format(sz_Model, charsmax(sz_Model), "%s", g_BossClaws[i]);
+		engfunc(EngFunc_PrecacheModel, sz_Model);
+	}
+
+	new iNum;
+	for (iNum = 0; iNum < sizeof g_sound_miss; iNum++)
+		engfunc(EngFunc_PrecacheSound, g_sound_miss[iNum]);
+	for (iNum = 0; iNum < sizeof g_sound_hit; iNum++)
+		engfunc(EngFunc_PrecacheSound, g_sound_hit[iNum]);
+	for (iNum = 0; iNum < sizeof g_sound_pain; iNum++)
+		engfunc(EngFunc_PrecacheSound, g_sound_pain[iNum]);
+	for (iNum = 0; iNum < sizeof g_sound_die; iNum++)
+		engfunc(EngFunc_PrecacheSound, g_sound_die[iNum]);
+	for (iNum = 0; iNum < sizeof g_sound_female_pain; iNum++)
+		engfunc(EngFunc_PrecacheSound, g_sound_female_pain[iNum]);
+	for (iNum = 0; iNum < sizeof g_sound_female_die; iNum++)
+		engfunc(EngFunc_PrecacheSound, g_sound_female_die[iNum]);
+	for (iNum = 0; iNum < sizeof g_sound_boss_pain; iNum++)
+		engfunc(EngFunc_PrecacheSound, g_sound_boss_pain[iNum]);
+	for (iNum = 0; iNum < sizeof g_sound_boss_die; iNum++)
+		engfunc(EngFunc_PrecacheSound, g_sound_boss_die[iNum]);
+	for (iNum = 0; iNum < sizeof g_sound_human_female_pain; iNum++)
+		engfunc(EngFunc_PrecacheSound, g_sound_human_female_pain[iNum]);
+	for (iNum = 0; iNum < sizeof g_sound_human_female_die; iNum++)
+		engfunc(EngFunc_PrecacheSound, g_sound_human_female_die[iNum]);
+	for (iNum = 0; iNum < sizeof g_sound_heal; iNum++)
+		engfunc(EngFunc_PrecacheSound, g_sound_heal[iNum]);
+	for (iNum = 0; iNum < sizeof g_sound_male_radio; iNum++)
+		engfunc(EngFunc_PrecacheSound, g_sound_male_radio[iNum]);
+	for (iNum = 0; iNum < sizeof g_sound_female_radio; iNum++)
+		engfunc(EngFunc_PrecacheSound, g_sound_female_radio[iNum]);
+	for (iNum = 0; iNum < sizeof g_sound_male_died_radio; iNum++)
+		engfunc(EngFunc_PrecacheSound, g_sound_male_died_radio[iNum]);
+	for (iNum = 0; iNum < sizeof g_sound_female_died_radio; iNum++)
+		engfunc(EngFunc_PrecacheSound, g_sound_female_died_radio[iNum]);
+	for (iNum = 0; iNum < sizeof g_Ambient_Sound; iNum++)
+		engfunc(EngFunc_PrecacheSound, g_Ambient_Sound[iNum]);
+	
+	engfunc(EngFunc_PrecacheSound, g_sound_break);
+	engfunc(EngFunc_PrecacheSound, g_BossStart);
+	engfunc(EngFunc_PrecacheSound, g_BossWarning);
+	engfunc(EngFunc_PrecacheSound, g_sound_zombiewin);
+	engfunc(EngFunc_PrecacheSound, g_sound_humanwin);
+	engfunc(EngFunc_PrecacheSound, g_sound_roundstart);
+	engfunc(EngFunc_PrecacheSound, g_sound_roundstats);
+}
+
+public zs_human_respawn(id) {
+	set_task(0.25, "radiosound", id);
+}
+
+public radiosound(id) {
+	new gender = g_HumanModelGender[g_HumanModelIndex[id]];
+	
+	if(gender == MALE) {
+		client_cmd(0, "spk sound/%s", g_sound_male_radio[random(sizeof(g_sound_male_radio))]);
+	} else if(gender == FEMALE) {
+		client_cmd(0, "spk sound/%s", g_sound_female_radio[random(sizeof(g_sound_female_radio))]);
+	}
+}
+
+public check_models_avail() {
+	remove_task(53535353);
+	
+	if(!g_ZombieCount || !g_HumanCount) {
+		new form[258];
+		
+		if(!g_ZombieCount) {
+			formatex(form, charsmax(form), "[ZombieSwarm] No have zombies");
+		}
+		
+		if(!g_HumanCount) {
+			if(strlen(form) > 1) {
+				formatex(form, charsmax(form), "%s and No have humans", form);
+			} else {
+				formatex(form, charsmax(form), "[ZombieSwarm] No have humans");
+			}
+		}
+		
+		set_fail_state(form);
+	}
+}
+
 public plugin_precache()
 {
 	register_plugin(PLUGIN, VERSION, AUTHOR);
@@ -377,75 +544,30 @@ public plugin_precache()
 	register_dictionary("zombie_swarm.txt");
 
 	register_concmd("zombie_swarm", "concmd_zombieswarm", ADMIN_BAN, "<0/1> Disable/Enable Zombie Swarm");
-
+	
+	healspr = precache_model(healsprite);
+	
 	cvar_Swith = register_cvar("zswarm_enable", "1");
 
 	if(!get_pcvar_num(cvar_Swith))
 		return;
 		
-	new sz_Model[256];
-
-	for(new i = 0 ; i < sizeof g_ZombiePlayerModels ; i++)
-	{
-		format(sz_Model, charsmax(sz_Model), "models/player/%s/%s.mdl", g_ZombiePlayerModels[i], g_ZombiePlayerModels[i]);
-		precache_model(sz_Model);
-	}
-	
-	format(sz_Model, charsmax(sz_Model), "models/player/%s/%s.mdl", g_BossPlayerModels, g_BossPlayerModels);
-	precache_model(sz_Model);
-	
-	for(new i = 0; i < sizeof(g_RandomModel); i++) {
-		format(sz_Model, charsmax(sz_Model), "models/player/%s/%s.mdl", g_RandomModel[i], g_RandomModel[i]);
-		precache_model(sz_Model);
-	}
-	
-	for(new i = 0; i < sizeof(g_ZombieClaws); i++) {
-		precache_model(g_ZombieClaws[i]);
-	}
-	
-	precache_model(g_BossClaws);
-
-	new iNum;
-	for (iNum = 0; iNum < sizeof g_sound_miss; iNum++)
-		precache_sound(g_sound_miss[iNum]);
-	for (iNum = 0; iNum < sizeof g_sound_hit; iNum++)
-		precache_sound(g_sound_hit[iNum]);
-	for (iNum = 0; iNum < sizeof g_sound_pain; iNum++)
-		precache_sound(g_sound_pain[iNum]);
-	for (iNum = 0; iNum < sizeof g_sound_die; iNum++)
-		precache_sound(g_sound_die[iNum]);
-	for (iNum = 0; iNum < sizeof g_sound_female_pain; iNum++)
-		precache_sound(g_sound_female_pain[iNum]);
-	for (iNum = 0; iNum < sizeof g_sound_female_die; iNum++)
-		precache_sound(g_sound_female_die[iNum]);
-	for (iNum = 0; iNum < sizeof g_sound_boss_pain; iNum++)
-		precache_sound(g_sound_boss_pain[iNum]);
-	for (iNum = 0; iNum < sizeof g_sound_boss_die; iNum++)
-		precache_sound(g_sound_boss_die[iNum]);
-	
-	for (iNum = 0; iNum < sizeof g_SoundBuild; iNum++)
-		precache_sound(g_SoundBuild[iNum]);
-	
-	for (iNum = 0; iNum < sizeof g_SoundComplete; iNum++)
-		precache_sound(g_SoundComplete[iNum]);
-		
-	precache_sound(g_BossStart);
-	precache_sound(g_BossWarning);
-	precache_sound(g_sound_zombiewin);
-	precache_sound(g_sound_humanwin);
-	precache_sound(g_sound_roundstart);
-	precache_sound(g_sound_roundstats);
-	
 	new iEnt = create_entity("info_map_parameters");
 	DispatchKeyValue(iEnt, "buying", "1");
 	DispatchSpawn(iEnt);
 
 	g_ForwardSpawn = register_forward(FM_Spawn, "Forward_Spawn");
+	
+	plugin_reprecache();
 }
 
 public plugin_natives() {
 	register_native("zs_get_user_zombie", "native_zs_get_user_zombie", 1);
 	register_native("zs_get_user_boss", "native_zs_get_user_boss", 1);
+	register_native("zs_get_user_model_gender", "native_zs_get_user_model_gender", 1);
+	
+	register_native("zs_add_zombie", "native_zs_add_zombie", 1);
+	register_native("zs_add_human", "native_zs_add_human", 1);
 }
 
 public native_zs_get_user_zombie(id) {
@@ -460,15 +582,19 @@ public plugin_init()
 {
 	if(!get_pcvar_num(cvar_Swith))
 		return;
-
+		
+	register_event("DeathMsg","DeathMsg","a");
+	
 	register_cvar("zswarm_fog_enable", "1");
 	register_cvar("zswarm_fog_color", "255 255 255");
 	register_cvar("zswarm_fog_density", "0.0014");
 	register_cvar("zswarm_boss_health", "10000");
 	register_cvar("zswarm_zombie_xdmg", "4");
 	register_cvar("zswarm_zombie_xhp", "65");
+	register_cvar("zswarm_zombie_xspd", "4");
 	register_cvar("zswarm_boss_xdmg", "8");
 	register_cvar("zswarm_boss_xhp", "1500");
+	register_cvar("zswarm_boss_xspd", "10");
 	register_cvar("zswarm_fog_enable", "1");
 	cvar_Health	 = register_cvar("zswarm_health", "80");
 	cvar_Armour	 = register_cvar("zswarm_armour", "100");
@@ -507,8 +633,11 @@ public plugin_init()
 	RegisterHam(Ham_Killed, "player", "Bacon_Killed_Post", 1);
 	for(new i = 0 ; i < sizeof g_TouchBlockEnts ; i++)
 		RegisterHam(Ham_Touch,	g_TouchBlockEnts[i], "Bacon_Touch");
-	RegisterHam(Ham_Player_ResetMaxSpeed, "player",	"Bacon_ResetMaxSpeed", 1);
-
+	RegisterHam(Ham_Player_ResetMaxSpeed, "player", "Bacon_ResetMaxSpeed", 1);
+	
+	RegisterHam(Ham_Weapon_PrimaryAttack, "weapon_knife", "PrimaryAttack", 1);
+	RegisterHam(Ham_Weapon_SecondaryAttack, "weapon_knife", "SecondaryAttack", 1);
+	
 	register_logevent("Logevent_RoundStart", 2,	"1=Round_Start");
 	register_logevent("Logevent_RoundEnd" , 2, "1=Round_End");
 
@@ -540,6 +669,7 @@ public plugin_init()
 	register_round(ROUND_START, "sv_round_start");
 	register_round(ROUND_RESTART, "sv_round_restart");
 	register_round(ROUND_NEW, "sv_round_new");
+	register_round(ROUND_END, "sv_round_end");
 	
 	register_concmd("zswarm_menu_AddWeap", "ConCmd_addweap", ADMIN_BAN, "<Weapon> Un-Restricts a weapon from the weapons menu.");
 	register_concmd("zswarm_menu_DelWeap", "ConCmd_delweap", ADMIN_BAN, "<Weapon> Restricts a weapon from the weapons menu.");
@@ -550,6 +680,7 @@ public plugin_init()
 		unregister_forward(FM_Spawn, g_ForwardSpawn);
 
 	register_forward(FM_CmdStart, "Forward_CmdStart");
+	register_forward(FM_CmdStart, "fm_CmdStart");
 	register_forward(FM_EmitSound, "Forward_EmitSound");
 	register_forward(FM_Touch, "Forward_Touch");
 	register_forward(FM_TraceLine, "Forward_TraceLine_Post", 1);
@@ -572,12 +703,81 @@ public plugin_init()
 	g_MaxPlayers = get_maxplayers();
 	g_bFFire = get_cvar_pointer("mp_friendlyfire");
 	
-	set_task(0.25, "Forward_Think_Weather", _, _, _, "b" );
+	set_task(0.1, "Forward_Think_Weather", _, _, _, "b" );
+}
+
+public PrimaryAttack(item) {
+	static id;
+	id = get_pdata_cbase(item, 41, 5);
+	
+	if(is_user_alive(id) && g_bZombie[id]) {
+		static Float: nextAttack;
+		nextAttack = 1.5;
+		
+		set_pdata_float(item, 46, nextAttack - (rounds * 0.05), 4);
+		set_pdata_float(item, 47, nextAttack - (rounds * 0.05), 4);
+		set_pdata_float(item, 48, nextAttack - (rounds * 0.05), 4);
+	}
+	
+	return HAM_IGNORED;
+}
+
+public SecondaryAttack(item) {
+	static id;
+	id = get_pdata_cbase(item, 41, 5);
+	
+	if(is_user_alive(id) && g_bZombie[id]) {
+		static Float: nextAttack;
+		nextAttack = 3.0;
+		
+		set_pdata_float(item, 46, nextAttack - (rounds * 0.05), 4);
+		set_pdata_float(item, 47, nextAttack - (rounds * 0.05), 4);
+		set_pdata_float(item, 48, nextAttack - (rounds * 0.05), 4);
+	}
+	
+	return HAM_IGNORED;
+}
+
+public DeathMsg() {
+	new id = read_data(2);
+	
+	if(!g_bZombie[id]) {
+		new gender = g_HumanModelGender[g_HumanModelIndex[id]];
+		if(gender == FEMALE) {
+			client_cmd(0, "spk sound/%s", g_sound_female_died_radio[random(sizeof(g_sound_female_died_radio))]);
+		} else if(gender == MALE) {
+			client_cmd(0, "spk sound/%s", g_sound_male_died_radio[random(sizeof(g_sound_male_died_radio))]);
+		}
+	}
+	
+	set_msg_block(get_user_msgid("DeathMsg"), BLOCK_ONCE);
 }
 
 public pl_prethink(id) {
 	if(is_user_alive(id)) {
 		new weapon = get_user_weapon(id);
+		
+		new szWeapon[128];
+		new szWeaponModel[128];
+		new szWeaponModele[128];
+		
+		pev(id, pev_viewmodel2, szWeapon, charsmax(szWeapon));
+		format(szWeaponModele, charsmax(szWeaponModele), "models/%s", g_ZombieClaws[g_ZombieModelIndex[id]]);
+		
+		if(!g_bBoss[id] && g_bZombie[id] && weapon == CSW_KNIFE && !(equali(szWeapon, szWeaponModele))) {
+			format(szWeaponModel, charsmax(szWeaponModel), "models/%s", g_ZombieClaws[g_ZombieModelIndex[id]]);
+			set_pev(id, pev_viewmodel2, szWeaponModel);
+			set_pev(id, pev_weaponmodel2, "");
+		}
+		
+		format(szWeaponModele, charsmax(szWeaponModele), "models/%s", g_BossClaws[g_BossIndex[id]]);
+		
+		if(g_bBoss[id] && weapon == CSW_KNIFE && !(equali(szWeapon, g_BossClaws[g_BossIndex[id]]))) {
+			format(szWeaponModel, charsmax(szWeaponModel), "models/%s", g_BossClaws[g_BossIndex[id]]);
+			set_pev(id, pev_viewmodel2, szWeaponModel);
+			set_pev(id, pev_weaponmodel2, "");
+		}
+		
 		if(weapon != 0 && weapon != CSW_KNIFE && weapon != CSW_FLASHBANG && weapon != CSW_SMOKEGRENADE && weapon != CSW_HEGRENADE) {
 			
 			new clip, ammo;
@@ -607,7 +807,9 @@ public select_boss() {
 	new id = players[random(counts)];
 	
 	g_bBoss[id] = 1;
-	cs_set_user_model(id, g_BossPlayerModels);
+	g_BossIndex[id] = random(sizeof(g_BossPlayerModels));
+	
+	cs_set_user_model(id, g_BossPlayerModels[g_BossIndex[id]]);
 	fm_set_user_health(id, get_cvar_num("zswarm_boss_health") + (rounds * get_cvar_num("zswarm_boss_xhp")));
 	
 	new name[64];
@@ -615,19 +817,40 @@ public select_boss() {
 	set_hudmessage(255, 120, 120, -1.0, 0.2, 0, 0.0, 0.1, 0.0, 2.0, 1);
 	show_hudmessage(0, "| BOSS ARRIVED |^n%s", name);
 	
-	Task_Strip(id + TASKID_STRIP);
+	strip_user_weapons(id); give_item(id, "weapon_knife");
+}
+
+public sv_round_end() {
+	return;
 }
 
 public sv_round_new() {
+	client_cmd(0, "stopsound");
+	
 	for(new i = 0; i < get_maxplayers(); i++) {
 		g_bBoss[i] = 0;
 	}
 }
-	
+
+public ambience_play(playid) {
+	new play = playid - 5000;
+	client_cmd(0, "spk sound/%s", g_Ambient_Sound[play]);
+	set_task(g_Ambient_Delay[play], "ambience_play", playid);
+}
+
 public sv_round_start() {
 	for(new i = 0; i < get_maxplayers(); i++) {
 		g_bBoss[i] = 0;
 	}
+	
+	for(new i = 0; i < sizeof(g_StartMessages); i++) {
+		client_print(0, print_chat, g_StartMessages[i]);
+	}
+	
+	new randamb = random(sizeof(g_Ambient_Sound));
+	g_Ambient_Data = randamb + 5000;
+	client_cmd(0, "spk sound/%s", g_Ambient_Sound[randamb]);
+	set_task(g_Ambient_Delay[randamb], "ambience_play", g_Ambient_Data);
 	
 	rounds++;
 	boss_rounds--;
@@ -649,18 +872,19 @@ public sv_round_start() {
 		client_cmd(0, "spk sound/%s", g_BossWarning);
 	}
 	
-	set_task(4.85, "round_stats", 0);
-	
+	set_task(4.65, "round_stats", 0);
 }
 
 public round_stats() {
 	new rs_health = get_pcvar_num(cvar_Health) + (rounds * get_cvar_num("zswarm_zombie_xhp"));
 	new rs_health_boss = get_cvar_num("zswarm_boss_health") + (rounds * get_cvar_num("zswarm_boss_xhp"));
+	new rs_speed_boss = get_cvar_num("zswarm_boss_speed") + (rounds * get_cvar_num("zswarm_boss_xspd"));
+	new rs_speed_zombie = get_cvar_num("zswarm_speed") + (rounds * get_cvar_num("zswarm_zombie_xspd"));
 	new Float: rs_dmg_zombie = ZOMBIE_SLASH_MAX + (rounds * get_cvar_num("zswarm_zombie_xdmg"));
 	new Float: rs_dmg_boss = BOSS_SLASH_MAX + (rounds * get_cvar_num("zswarm_boss_xdmg"));
 	
 	set_hudmessage(255, 255, 190, -1.0, 0.2, 0, 0.0, 0.1, 0.0, 4.5, 1);
-	show_hudmessage(0, "| ROUND STATS |^nHealth: %d | %d^nDamage: %0.2f | %0.2f", rs_health, rs_health_boss, rs_dmg_zombie, rs_dmg_boss);
+	show_hudmessage(0, "| ROUND STATS |^nHealth: %d | %d^nDamage: %0.2f | %0.2f^nSpeed: %d | %d", rs_health, rs_health_boss, rs_dmg_zombie, rs_dmg_boss, rs_speed_zombie, rs_speed_boss);
 	
 	sound_play(3);
 }
@@ -672,13 +896,89 @@ public sv_round_restart() {
 
 public plugin_cfg()
 {
+	new mapname[32];
+	get_mapname(mapname, charsmax(mapname));
+	if(containi(mapname, "zs_") != -1) {
+		// continue
+	} else {
+		set_fail_state("This game mode does not work on this map - %s", mapname);
+	}
+	
 	if(!get_pcvar_num(cvar_Swith))
 		return;
+	
+	plugin_reprecache();
+	check_models_avail();
 	
 	boss_rounds = 5;
 	rounds = 1;
 	
 	g_RoundStatus = 1;
+}
+
+public native_zs_add_zombie(player[], model[], gender) {
+	param_convert(1);
+	param_convert(2);
+	
+	new check_player[128]; formatex(check_player, charsmax(check_player), "models/player/%s/%s.mdl", player, player);
+	new check_model[128]; formatex(check_model, charsmax(check_model), "models/zswarm/%s", model);
+	
+	if(!(file_exists(check_player)) || !(file_exists(check_model)) || gender < 0 || gender > 1) {
+		
+		if(!(file_exists(check_player))) {
+			server_print("%d. [ZombieSwarm] Error: %s Player model not found.", g_ZombieCount + 1, player);
+		}
+		
+		if(!(file_exists(check_model))) {
+			server_print("%d. [ZombieSwarm] Error: %s Knife model not found.", g_ZombieCount + 1, model);
+		}
+		
+		if(gender < 0 || gender > 1) {
+			server_print("%d. [ZombieSwarm] Error: Invalid model gender.", g_ZombieCount + 1);
+		}
+		
+		return;
+	}
+	
+	formatex(g_ZombiePlayerModels[g_ZombieCount], charsmax(g_ZombiePlayerModels), "%s", player);
+	formatex(g_ZombieClaws[g_ZombieCount], charsmax(g_ZombieClaws), "zswarm/%s", model);
+	g_ZombieModelGender[g_ZombieCount] = gender;
+	g_ZombieCount++;
+	
+	server_print("%d. [ZombieSwarm] New zombie added: %s", g_ZombieCount, player);
+}
+
+public native_zs_add_human(player[], gender) {
+	param_convert(1);
+	
+	new check_player[128]; formatex(check_player, charsmax(check_player), "models/player/%s/%s.mdl", player, player);
+	
+	if(!(file_exists(check_player)) || gender < 0 || gender > 1) {
+		
+		if(!(file_exists(check_player))) {
+			server_print("%d. [ZombieSwarm] Error: %s Player model not found.", g_ZombieCount + 1, player);
+		}
+		
+		if(gender < 0 || gender > 1) {
+			server_print("%d. [ZombieSwarm] Error: Invalid model gender.", g_ZombieCount + 1);
+		}
+		
+		return;
+	}
+	
+	formatex(g_HumanPlayerModels[g_HumanCount], charsmax(g_HumanPlayerModels), "%s", player);
+	g_HumanModelGender[g_HumanCount] = gender;
+	g_HumanCount++;
+	
+	server_print("%d. [ZombieSwarm] New human added: %s", g_HumanCount, player);
+}
+
+public native_zs_get_user_model_gender(id) {
+	if(g_bZombie[id]) {
+		return g_ZombieModelGender[g_ZombieModelIndex[id]];
+	} else {
+		return g_HumanModelGender[g_HumanModelIndex[id]];
+	}
 }
 	
 public client_putinserver(id)
@@ -694,6 +994,7 @@ public client_disconnected(id)
 {
 	g_bIsAlive[id] = false;
 	g_bIsBot[id] = false;
+	g_UserArmorType[id] = 0;
 }
 
 public concmd_zombieswarm(id, level, cid)
@@ -772,15 +1073,14 @@ public Bacon_Spawn_Post(id)
 
 	if(team == CS_TEAM_T)
 	{
-		new Health, Armour, Float: Gravity, FootSteps;
+		new Health, Float: Gravity, FootSteps;
 		Health = get_pcvar_num(cvar_Health) + (rounds * get_cvar_num("zswarm_zombie_xhp"));
-		Armour = get_pcvar_num(cvar_Armour);
 		Gravity = get_pcvar_float(cvar_Gravity) / 800;
 		FootSteps = get_pcvar_num(cvar_Footsteps);
 
 		set_pev(id, pev_max_health, float(Health));
 		set_user_health(id, Health);
-		// cs_set_user_armor(id, Armour, CS_ARMOR_VESTHELM);
+		cs_set_user_armor(id, 0, CS_ARMOR_NONE);
 		set_user_gravity(id, Gravity);
 		set_user_footsteps(id, FootSteps);
 
@@ -859,15 +1159,51 @@ public Bacon_TraceAttack_Post(iVictim, iAttacker, Float: flDamage, Float: flDire
 	g_bHeadshot[iAttacker][iVictim] = bool:( get_tr2(trace_handle, TR_iHitgroup) == HIT_HEAD );
 	
 	return HAM_IGNORED;
-}		
+}
+
+public fm_CmdStart(id, Handle) {
+	new Buttons; Buttons = get_uc(Handle,UC_Buttons);
+	
+	if(!native_zs_get_user_zombie(id)) {
+		return FMRES_IGNORED;
+	}
+	
+	if(Buttons & IN_ATTACK && !Attack[id]) {
+		Buttons &= ~IN_ATTACK;
+		set_uc( Handle , UC_Buttons , Buttons );
+		return FMRES_SUPERCEDE;
+	}
+	
+	if(!task_exists(id + 9948300)) {
+		Attack[id] = 0;
+		set_task(1.25 - (rounds * 0.035), "unattack", id + 9948300);
+	}
+	
+	return FMRES_IGNORED;
+} 
+
+public unattack(taskid) {
+	new id = taskid - 9948300;
+	Attack[id] = 1;
+	remove_task(taskid);
+}
 
 public Bacon_TakeDamage(iVictim, iInflictor, iAttacker, Float:flDamage, iDamageType)
 {
 	if (!is_user_alive(iAttacker) || !is_user_connected(iAttacker))
 		return HAM_IGNORED;
 		
+	if (!iVictim || !iAttacker || iAttacker == iVictim || iVictim > 32 || iAttacker > 32) {
+		return HAM_IGNORED;
+	}
+		
+	if(g_bZombie[iVictim] && !g_bZombie[iAttacker]) {
+		remove_task(iVictim + 330);
+		set_task(2.5, "health_regeneration", iVictim + 330);
+	}
+		
 	new weapon = get_user_weapon(iAttacker);
-	if(weapon == CSW_KNIFE && !g_bZombie[iVictim])
+	if(weapon == CSW_KNIFE && !g_bZombie[iVictim] && g_bZombie[iAttacker])
 	{
 		new button = get_user_button(iAttacker);
 
@@ -880,12 +1216,60 @@ public Bacon_TakeDamage(iVictim, iInflictor, iAttacker, Float:flDamage, iDamageT
 			if(g_bBoss[iAttacker])
 				flDamage = random_float(BOSS_STAB_MIN + (rounds * get_cvar_num("zswarm_boss_xdmg")), BOSS_STAB_MAX + (rounds * get_cvar_num("zswarm_boss_xdmg")));
 		}
-
+	
+		if(cs_get_user_armor(iVictim) > 0 || g_UserArmorType[iVictim] != 0) {
+			if(g_UserArmorType[iVictim] == 2) {
+				cs_set_user_armor(iVictim, cs_get_user_armor(iVictim) - floatround(flDamage, floatround_tozero), CS_ARMOR_VESTHELM);
+				
+				if(cs_get_user_armor(iVictim) <= 1) {
+					cs_set_user_armor(iVictim, get_pcvar_num(cvar_Armour), CS_ARMOR_KEVLAR);
+					g_UserArmorType[iVictim] = 1;
+					emit_sound(iVictim, CHAN_AUTO, g_sound_break, VOL_NORM, ATTN_NORM, 0, PITCH_NORM);
+				} else {
+					emit_sound(iVictim, CHAN_AUTO, "player/bhit_helmet-1.wav", VOL_NORM, ATTN_NORM, 0, PITCH_NORM);
+				}
+			} else if(g_UserArmorType[iVictim] == 1) {
+				cs_set_user_armor(iVictim, cs_get_user_armor(iVictim) - floatround(flDamage, floatround_tozero), CS_ARMOR_KEVLAR);
+				
+				if(cs_get_user_armor(iVictim) <= 1) {
+					cs_set_user_armor(iVictim, 0, CS_ARMOR_NONE);
+					g_UserArmorType[iVictim] = 0;
+					emit_sound(iVictim, CHAN_AUTO, g_sound_break, VOL_NORM, ATTN_NORM, 0, PITCH_NORM);
+				} else {
+					emit_sound(iVictim, CHAN_AUTO, "player/bhit_helmet-1.wav", VOL_NORM, ATTN_NORM, 0, PITCH_NORM);
+				}
+			}
+			
+			SetHamParamFloat(4, 0.0);
+			return HAM_SUPERCEDE;
+		}
+		
 		SetHamParamFloat(4, flDamage);
 		return HAM_HANDLED;
 	}
 
 	return HAM_IGNORED;
+}
+
+public health_regeneration(taskid) {
+	new id = taskid - 330;
+	set_task(0.92, "health_regeneration", taskid);
+	
+	if(!is_user_alive(id) || !is_user_connected(id) || !g_bZombie[id] || g_bBoss[id]) {
+		remove_task(taskid);
+		return;
+	}
+	
+	sprite_index(id, healspr, 0, 0, 7, 12);
+	emit_sound(id, CHAN_AUTO, g_sound_heal[g_ZombieModelGender[g_ZombieModelIndex[id]]], VOL_NORM, ATTN_NORM, 0, PITCH_NORM);
+	
+	new maxhp = get_pcvar_num(cvar_Health) + (rounds * get_cvar_num("zswarm_zombie_xhp"));
+	if(get_user_health(id) < maxhp) {
+		fm_set_user_health(id, get_user_health(id) + (maxhp / 10));
+	} if(get_user_health(id) >= maxhp) {
+		remove_task(taskid);
+		fm_set_user_health(id, maxhp);
+	}
 }
 
 public Bacon_TakeDamage_Post(iVictim, inflictor, iAttacker, Float:flDamage, iDamageType)
@@ -947,6 +1331,9 @@ public Bacon_Touch(ent, id)
 
 public Bacon_ResetMaxSpeed(id)
 {
+	if(!is_user_alive(id) || !is_user_connected(id))
+		return;
+		
 	if(!g_bZombie[id])
 		return;
 
@@ -954,9 +1341,10 @@ public Bacon_ResetMaxSpeed(id)
 
 	if(get_user_maxspeed(id) != 1.0) {
 		if(g_bBoss[id] == 0) {
-			set_user_maxspeed(id, maxspeed + (25 + (rounds * 4)));
+			set_user_maxspeed(id, maxspeed + (rounds * get_cvar_num("zswarm_zombie_xspd")));
 		} else {
-			set_user_maxspeed(id, maxspeed + (rounds * 2));
+			maxspeed = float(get_cvar_num("zswarm_boss_speed"));
+			set_user_maxspeed(id, maxspeed + (rounds * get_cvar_num("zswarm_boss_xspd")));
 		}
 	}
 
@@ -1004,9 +1392,11 @@ public Event_CurWeapon(id)
 	{
 		engclient_cmd(id, "weapon_knife");
 		if(g_bBoss[id] == 0) {
-			UTIL_SetModel(id, g_BossClaws, "");
+			set_pev(id, pev_viewmodel2, g_BossClaws);
+			set_pev(id, pev_weaponmodel2, "");
 		} else {
-			UTIL_SetModel(id, g_ZombieClaws[g_ZombieModelIndex[id]], "");
+			set_pev(id, pev_viewmodel2, g_ZombieClaws[g_ZombieModelIndex[id]]);
+			set_pev(id, pev_weaponmodel2, "");
 		}
 	}
 }
@@ -1374,10 +1764,6 @@ public give_weapons(id)
 	get_pcvar_string(cvar_Equip,weapon, charsmax(weapon));
 	get_pcvar_string(cvar_Weapons, weapon, charsmax(weapon));
 
-	new flags = read_flags(weapon);
-	if(flags & MOD_VESTHELM) cs_set_user_armor(id, 100, CS_ARMOR_VESTHELM);
-	else if(flags & MOD_VEST) cs_set_user_armor(id, 100, CS_ARMOR_KEVLAR);
-	
 	new he, flash, smoke;
 	new weaponu[32];
 	get_pcvar_string(cvar_Equip, weaponu, charsmax(weaponu));
@@ -1793,7 +2179,23 @@ public Forward_EmitSound(id, channel, sample[], Float:volume, Float:attn, flag, 
 			if (sample[6] == 'n' && sample[7] == 'v' && sample[8] == 'g')
 				return FMRES_SUPERCEDE;
 	}
-
+	
+	if (!g_bZombie[id]) {
+		if (sample[1] == 'l' && sample[2] == 'a' && sample[3] == 'y' && ( (containi(sample, "bhit") != -1) || (containi(sample, "pain") != -1) || (containi(sample, "shot") != -1))) {
+			if (g_HumanModelGender[g_HumanModelIndex[id]] == FEMALE) {
+				emit_sound(id, CHAN_AUTO, g_sound_human_female_pain[random(sizeof g_sound_human_female_pain)], volume, attn, flag, pitch);
+				return FMRES_SUPERCEDE;
+			}
+		}
+	
+		if (sample[7] == 'd' && (sample[8] == 'i' && sample[9] == 'e' || sample[12] == '6')) {
+			if (g_HumanModelGender[g_HumanModelIndex[id]] == FEMALE) {
+				emit_sound(id, CHAN_AUTO, g_sound_human_female_die[random(sizeof g_sound_human_female_die)], volume, attn, flag, pitch);
+				return FMRES_SUPERCEDE;
+			}
+		}
+	}
+	
 	return FMRES_IGNORED;
 }
 
@@ -1999,13 +2401,20 @@ public Task_Model(id)
 		return;
 		
 	new CsTeams: team = cs_get_user_team(id);
-	new modelindex = random(sizeof g_ZombiePlayerModels);
+	new modelindex = random(g_ZombieCount);
 	g_ZombieModelIndex[id] = modelindex;
 	
 	if(team == CS_TEAM_T) {
 		cs_set_user_model(id, g_ZombiePlayerModels[modelindex]);
 	} else {
-		cs_set_user_model(id, g_RandomModel[modelindex]);
+		modelindex = random(g_HumanCount);
+		g_HumanModelIndex[id] = modelindex;
+		cs_set_user_model(id, g_HumanPlayerModels[modelindex]);
+	}
+	
+	if(!g_bZombie[id]) {
+		cs_set_user_armor(id, get_pcvar_num(cvar_Armour), CS_ARMOR_VESTHELM);
+		g_UserArmorType[id] = 2;
 	}
 }
 
@@ -2021,7 +2430,6 @@ public Task_Strip(id)
 	
 	strip_user_weapons(id);
 	give_item(id, "weapon_knife");
-	UTIL_SetModel(id, g_ZombieClaws[g_ZombieModelIndex[id]], "");
 }
 
 public Task_NVG(id)
@@ -2091,6 +2499,22 @@ public fn_Rounds()
 			}
 		}
 	}
+}
+
+public sprite_index(id, sprite, x, y, z, scale) {
+	// Sprite Effect
+	static origin[3];
+	get_user_origin(id, origin);
+	
+	message_begin(MSG_PVS, SVC_TEMPENTITY, origin);
+	write_byte(TE_SPRITE); // TE id
+	write_coord(origin[0] + x); // x
+	write_coord(origin[1] + y); // y
+	write_coord(origin[2] + y); // z
+	write_short(sprite); // sprite
+	write_byte(scale); // scale
+	write_byte(255); // brightness
+	message_end();
 }
 
 stock fm_set_user_model(player, modelname[])

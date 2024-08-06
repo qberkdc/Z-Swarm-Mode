@@ -9,14 +9,17 @@ new ei_name[128][128];
 new ei_cost[128];
 new ei_count;
 new ei_itemselect;
+new ei_return;
 new ei_dummyresult;
 
 public plugin_init() {
 	register_plugin("[ZS] Game Menu", "v2.53.6", "--chcode");
 	register_clcmd("chooseteam", "pl_gamemenu");
 	register_clcmd("say /gamemenu", "pl_gamemenu");
+	register_clcmd("buy", "ExtraItem");
 	
-	ei_itemselect = CreateMultiForward("zs_item_selected", ET_IGNORE, FP_CELL, FP_CELL)
+	ei_itemselect = CreateMultiForward("zs_item_select", ET_IGNORE, FP_CELL, FP_CELL)
+	ei_return = CreateMultiForward("zs_item_return", ET_IGNORE, FP_CELL, FP_CELL)
 }
 
 public plugin_natives() {
@@ -56,6 +59,7 @@ public native_zs_get_item_cost(id) {
 
 public native_zs_set_item_return(id, itemid) {
 	zs_set_user_money(id, zs_get_user_money(id) + ei_cost[itemid]);
+	ExecuteForward(ei_return, ei_dummyresult, id, itemid);
 }
 
 public pl_gamemenu(id) {
@@ -71,7 +75,9 @@ public GameMenu(id) {
     menu_additem(menu, "^^1 - \wSelect Weapon", "1", 0);
     menu_additem(menu, "^^1 - \wExtra Items", "2", 0);
     menu_additem(menu, "^^1 - \wUpgrade Stats", "3", 0);
-    menu_additem(menu, "^^1 - \wSwitch Spectator", "4", 0);
+    menu_additem(menu, "^^1 - \wKillfade Options", "4", 0);
+    menu_additem(menu, "^^1 - \wVIP Menu", "5", 0);
+    menu_additem(menu, "^^1 - \wSwitch Spectator", "6", 0);
     menu_setprop(menu, MPROP_EXIT, MEXIT_ALL);
     menu_display(id, menu, 0);
     
@@ -99,6 +105,12 @@ public GameHandle(id, menu, item) {
     	client_cmd(id, "say /upgrade");
     }
     if(key == 4) {
+    	client_cmd(id, "say /kf");
+    }
+    if(key == 5) {
+    	client_cmd(id, "say /vip");
+    }
+    if(key == 6) {
     	cs_set_user_team(id, CS_TEAM_SPECTATOR);
   	  user_kill(id);
     }
@@ -172,5 +184,6 @@ public ExtraItemHandle(id, menu, item) {
 	ExecuteForward(ei_itemselect, ei_dummyresult, id, itemid);
 	
     menu_destroy(menu);
+    ExtraItem(id);
     return PLUGIN_HANDLED;
 } 
