@@ -13,8 +13,7 @@
 ----
 
 * **`[#]`** **Mod Authors**
-* **`[#]`** **`(  Modder  )`** Multi_Midgets
-* **`[#]`** **`( Modifier )`** --chcode
+* **`[#]`** **`( Modding )`** --chcode
 * 
 * **`[#]`** **Model/Sound Arranged**
 * **`[#]`** [ByOreo](https://github.com/byoreo/)
